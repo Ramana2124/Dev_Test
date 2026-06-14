@@ -68,7 +68,6 @@ pipeline {
                     sed -i 's|IMAGE_PLACEHOLDER|784369108574.dkr.ecr.ap-south-1.amazonaws.com/sample-app:${env.BUILD_NUMBER}|g' deployment.yaml
                 """
                 sh 'kubectl apply -f deployment.yaml'
-                sh 'kubectl apply -f service.yaml'
                 echo '----------- EKS Deploy Completed ----------'
             }
         }

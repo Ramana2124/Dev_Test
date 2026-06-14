@@ -1,105 +1,94 @@
-def registry = 'https://satishk.jfrog.io'
-def imageName = 'satishk.jfrog.io/satish-docker-local/sample_app'
-def version   = '2.1.2'
 pipeline {
     agent {
         node {
             label 'maven'
         }
     }
-environment {
-    PATH = "/usr/share/maven/bin:$PATH"
-}
+
+    environment {
+        PATH = "/usr/share/maven/bin:$PATH"
+        AWS_REGION = 'ap-south-1'
+        AWS_ACCOUNT_ID = '784369108574'
+        ECR_REPO_NAME = 'sample-app'
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        ECR_REGISTRY = "784369108574.dkr.ecr.ap-south-1.amazonaws.com"
+        IMAGE_NAME = "784369108574.dkr.ecr.ap-south-1.amazonaws.com/sample-app:${env.BUILD_NUMBER}"
+        EKS_CLUSTER_NAME = 'YOUR_EKS_CLUSTER_NAME'
+    }
+
     stages {
-        stage("build"){
+
+        stage('Checkout') {
             steps {
-                 echo "----------- build started ----------"
-                sh 'mvn clean deploy -Dmaven.test.skip=true'
-                 echo "----------- build complted ----------"
+                echo '----------- Checkout Started ----------'
+                checkout scm
+                echo '----------- Checkout Completed ----------'
             }
         }
-        stage("test"){
-            steps{
-                echo "----------- unit test started ----------"
+
+        stage('Build') {
+            steps {
+                echo '----------- Build Started ----------'
+                sh 'mvn clean package -Dmaven.test.skip=true'
+                echo '----------- Build Completed ----------'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                echo '----------- Unit Test Started ----------'
                 sh 'mvn surefire-report:report'
-                 echo "----------- unit test Complted ----------"
+                echo '----------- Unit Test Completed ----------'
             }
         }
-        stage('SonarQube analysis') {
-        environment {
-          scannerHome = tool 'satish-sonarqube-scanner'
-        }
-            steps{
-            withSonarQubeEnv('satish-sonarqube-server') {
-              sh "${scannerHome}/bin/sonar-scanner"
-            }
-            }
-        }
-        stage("Quality Gate"){
+
+        stage('Docker Build') {
             steps {
-                script {
-                timeout(time: 1, unit: 'HOURS') {
-            def qg = waitForQualityGate()
-            if (qg.status != 'OK') {
-            error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                echo '----------- Docker Build Started ----------'
+                sh "docker build -t sample-app:${env.BUILD_NUMBER} ."
+                sh "docker tag sample-app:${env.BUILD_NUMBER} 784369108574.dkr.ecr.ap-south-1.amazonaws.com/sample-app:${env.BUILD_NUMBER}"
+                echo '----------- Docker Build Completed ----------'
             }
         }
-        }
+
+        stage('ECR Login & Push') {
+            steps {
+                echo '----------- ECR Push Started ----------'
+                sh """
+                    aws ecr get-login-password --region ap-south-1 | \
+                    docker login --username AWS --password-stdin \
+                    784369108574.dkr.ecr.ap-south-1.amazonaws.com
+                """
+                sh "docker push 784369108574.dkr.ecr.ap-south-1.amazonaws.com/sample-app:${env.BUILD_NUMBER}"
+                echo '----------- ECR Push Completed ----------'
             }
         }
-         stage("Jar Publish") {
-        steps {
-            script {
-                    echo '<--------------- Jar Publish Started --------------->'
-                     def server = Artifactory.newServer url:registry+"/artifactory" ,  credentialsId:"jfrog_cred"
-                     def properties = "buildid=${env.BUILD_ID},commitid=${GIT_COMMIT}";
-                     def uploadSpec = """{
-                          "files": [
-                            {
-                              "pattern": "jarstaging/(*)",
-                              "target": "maven-libs-release-local/{1}",
-                              "flat": "false",
-                              "props" : "${properties}",
-                              "exclusions": [ "*.sha1", "*.md5"]
-                            }
-                         ]
-                     }"""
-                     def buildInfo = server.upload(uploadSpec)
-                     buildInfo.env.collect()
-                     server.publishBuildInfo(buildInfo)
-                     echo '<--------------- Jar Publish Ended --------------->'  
-            
+
+        stage('Deploy to EKS') {
+            steps {
+                echo '----------- EKS Deploy Started ----------'
+                sh """
+                    aws eks update-kubeconfig \
+                        --region ap-south-1 \
+                        --name ${EKS_CLUSTER_NAME}
+                """
+                sh """
+                    sed -i 's|IMAGE_PLACEHOLDER|784369108574.dkr.ecr.ap-south-1.amazonaws.com/sample-app:${env.BUILD_NUMBER}|g' k8s/deployment.yaml
+                """
+                sh 'kubectl apply -f k8s/deployment.yaml'
+                sh 'kubectl apply -f k8s/service.yaml'
+                echo '----------- EKS Deploy Completed ----------'
             }
-        }   
+        }
+
     }
-    stage(" Docker Build ") {
-      steps {
-        script {
-           echo '<--------------- Docker Build Started --------------->'
-           app = docker.build(imageName+":"+version)
-           echo '<--------------- Docker Build Ends --------------->'
+
+    post {
+        success {
+            echo 'Pipeline completed successfully! Application deployed to EKS!'
         }
-      }
-    }
-            stage (" Docker Publish "){
-        steps {
-            script {
-               echo '<--------------- Docker Publish Started --------------->'  
-                docker.withRegistry(registry, 'jfrog_cred'){
-                    app.push()
-                }    
-               echo '<--------------- Docker Publish Ended --------------->'  
-            }
+        failure {
+            echo 'Pipeline failed! Check logs for details.'
         }
     }
-stage(" Deploy ") {
-       steps {
-         script {
-            echo '<--------------- Helm Deploy Started --------------->'
-            sh 'helm install sample-app sample-app-1.0.1'
-            echo '<--------------- Helm deploy Ends --------------->'
-         }
-       }
-}  
-}
 }

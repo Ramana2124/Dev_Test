@@ -8,7 +8,7 @@ pipeline {
         }
     }
 environment {
-    PATH = "/opt/apache-maven-3.9.4/bin:$PATH"
+    PATH = "/usr/share/maven/bin:$PATH"
 }
     stages {
         stage("build"){
@@ -25,13 +25,12 @@ environment {
                  echo "----------- unit test Complted ----------"
             }
         }
-
         stage('SonarQube analysis') {
         environment {
           scannerHome = tool 'satish-sonarqube-scanner'
         }
             steps{
-            withSonarQubeEnv('satish-sonarqube-server') { // If you have configured more than one global server connection, you can specify its name
+            withSonarQubeEnv('satish-sonarqube-server') {
               sh "${scannerHome}/bin/sonar-scanner"
             }
             }
@@ -39,8 +38,8 @@ environment {
         stage("Quality Gate"){
             steps {
                 script {
-                timeout(time: 1, unit: 'HOURS') { // Just in case something goes wrong, pipeline will be killed after a timeout
-            def qg = waitForQualityGate() // Reuse taskId previously collected by withSonarQubeEnv
+                timeout(time: 1, unit: 'HOURS') {
+            def qg = waitForQualityGate()
             if (qg.status != 'OK') {
             error "Pipeline aborted due to quality gate failure: ${qg.status}"
             }
@@ -73,8 +72,6 @@ environment {
             }
         }   
     }
-
-
     stage(" Docker Build ") {
       steps {
         script {
@@ -84,7 +81,6 @@ environment {
         }
       }
     }
-
             stage (" Docker Publish "){
         steps {
             script {
@@ -96,15 +92,6 @@ environment {
             }
         }
     }
-
-    // stage (" Deploy "){
-    //     steps {
-    //         script {
-    //            sh './deploy.sh'  
-    //         }
-    //     }
-    // }
-
 stage(" Deploy ") {
        steps {
          script {
@@ -116,5 +103,3 @@ stage(" Deploy ") {
 }  
 }
 }
-
-

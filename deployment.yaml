@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: sample-app
-        image: 784369108574.dkr.ecr.ap-south-1.amazonaws.com/sample-app:IMAGE_PLACEHOLDER
+        image: IMAGE_PLACEHOLDER
         ports:
         - containerPort: 8080
 ---

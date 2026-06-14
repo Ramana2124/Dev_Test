@@ -17,7 +17,7 @@ spec:
       - name: sample-app
         image: IMAGE_PLACEHOLDER
         ports:
-        - containerPort: 8080
+        - containerPort: 8000
 ---
 apiVersion: v1
 kind: Service
@@ -31,4 +31,4 @@ spec:
   ports:
   - protocol: TCP
     port: 80
-    targetPort: 8080
+    targetPort: 8000

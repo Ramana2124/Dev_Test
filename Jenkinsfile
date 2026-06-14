@@ -4,7 +4,6 @@ pipeline {
             label 'maven'
         }
     }
-
     environment {
         PATH = "/usr/share/maven/bin:$PATH"
         AWS_REGION = 'ap-south-1'
@@ -13,11 +12,9 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         ECR_REGISTRY = "784369108574.dkr.ecr.ap-south-1.amazonaws.com"
         IMAGE_NAME = "784369108574.dkr.ecr.ap-south-1.amazonaws.com/sample-app:${env.BUILD_NUMBER}"
-        EKS_CLUSTER_NAME = 'YOUR_EKS_CLUSTER_NAME'
+        EKS_CLUSTER_NAME = 'devops-cluster'
     }
-
     stages {
-
         stage('Checkout') {
             steps {
                 echo '----------- Checkout Started ----------'
@@ -25,7 +22,6 @@ pipeline {
                 echo '----------- Checkout Completed ----------'
             }
         }
-
         stage('Build') {
             steps {
                 echo '----------- Build Started ----------'
@@ -33,7 +29,6 @@ pipeline {
                 echo '----------- Build Completed ----------'
             }
         }
-
         stage('Test') {
             steps {
                 echo '----------- Unit Test Started ----------'
@@ -41,7 +36,6 @@ pipeline {
                 echo '----------- Unit Test Completed ----------'
             }
         }
-
         stage('Docker Build') {
             steps {
                 echo '----------- Docker Build Started ----------'
@@ -50,7 +44,6 @@ pipeline {
                 echo '----------- Docker Build Completed ----------'
             }
         }
-
         stage('ECR Login & Push') {
             steps {
                 echo '----------- ECR Push Started ----------'
@@ -63,26 +56,23 @@ pipeline {
                 echo '----------- ECR Push Completed ----------'
             }
         }
-
         stage('Deploy to EKS') {
             steps {
                 echo '----------- EKS Deploy Started ----------'
                 sh """
                     aws eks update-kubeconfig \
                         --region ap-south-1 \
-                        --name ${EKS_CLUSTER_NAME}
+                        --name devops-cluster
                 """
                 sh """
-                    sed -i 's|IMAGE_PLACEHOLDER|784369108574.dkr.ecr.ap-south-1.amazonaws.com/sample-app:${env.BUILD_NUMBER}|g' k8s/deployment.yaml
+                    sed -i 's|IMAGE_PLACEHOLDER|784369108574.dkr.ecr.ap-south-1.amazonaws.com/sample-app:${env.BUILD_NUMBER}|g' deployment.yaml
                 """
-                sh 'kubectl apply -f k8s/deployment.yaml'
-                sh 'kubectl apply -f k8s/service.yaml'
+                sh 'kubectl apply -f deployment.yaml'
+                sh 'kubectl apply -f service.yaml'
                 echo '----------- EKS Deploy Completed ----------'
             }
         }
-
     }
-
     post {
         success {
             echo 'Pipeline completed successfully! Application deployed to EKS!'
